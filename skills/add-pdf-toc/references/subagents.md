@@ -27,9 +27,10 @@ Task:
 1. Decide if a printed table of contents exists.
 2. If yes, extract hierarchical entries and printed page numbers. Estimate PDF offset by searching chapter titles in later body text if those pages were provided; otherwise leave `page_offset` null for the orchestrator to resolve with extra slices. Do not trust printed numbers that OCR glued to the wrong heading until two body matches agree.
 3. Emit `printed_toc.json` and a `chapters.json` draft.
-4. If no printed TOC, say so. The orchestrator will split by page count (~30 pages) or by strong font hints.
+4. Fill `front_matter` from the pages before the printed TOC, in reading order, plus a contents entry for `toc_pages` when a printed TOC exists. One level-1 entry per distinct section that is actually there. Cover, title page, copyright, and a preface that starts before the contents are included only when those pages exist — and they are not the whole set. Also include every other real section (half-title, series or imprint page, dedication, epigraph, acknowledgments, translator's or editor's note, how to use this book, lists of figures / tables / abbreviations, about the author, a map, a second preface, or anything else those pages contain). Use a short structural title (`Cover` / `封面`, `Title page` / `扉页`, `Copyright` / `版权页`, `Contents` / `目录` or `目次`, in the book's script) only for cover, title page, copyright, and the contents page, with `"structural": true`. Every other title is the heading on that page, with `quote` copied from it and `"structural": false`. A preface or similar section that starts after the TOC and is absent from the printed entries still goes in `front_matter`, at its real start page. Do not invent a section. Skip blank pages and ads.
+5. If no printed TOC, say so. The orchestrator will split by page count (~30 pages) or by strong font hints. Still emit `front_matter` for the real sections before the body.
 
-Do not emit the detailed ebook outline here. Front matter may be one `front` chapter; body lessons are separate chapters.
+Do not emit the detailed ebook outline here. Front matter may be one `front` chapter; body lessons are separate chapters. `front_matter` is the bookmark list for those pages, not a replacement for the body outline.
 
 ## Fine headings (one subagent per chapter, parallel)
 
@@ -53,7 +54,7 @@ Task: extract a finer outline than the printed TOC from **body headings**. Rules
 
 If the slice is mostly plates, return fewer entries rather than guessing.
 
-**Front matter:** if the slice is clearly cover / title page / preface / contents, you may use short structural titles (`Cover`, `Title page`, `Preface`, `Contents`, or the book's own script: 封面 / 扉页 / 序言 / 目次). `quote` must still be copied from that page (book title, 「目次」, the preface heading). Do not invent body section titles this way.
+**Front matter:** structural titles (`Cover`, `Title page`, `Copyright`, `Contents`, or the book's own script: 封面 / 扉页 / 版权页 / 目录) are only for the cover, title page, copyright page, and contents page. Any other section before the printed TOC keeps the heading printed on that page (献辞, 使用说明, 插图目录, and whatever else is there). `quote` must still be copied from that page. Do not invent a section the pages do not contain, and do not invent body section titles this way.
 
 A chapter that is not the first in the book may start at level 2 when its parent unit already exists; the orchestrator merges.
 

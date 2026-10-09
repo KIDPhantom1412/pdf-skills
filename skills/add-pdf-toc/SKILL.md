@@ -69,10 +69,10 @@ Copy and tick:
 - [ ] detect
 - [ ] if needs_ocr: look up LangRec, then front-matter OCR (--start 1 --end 30)
 - [ ] extract front matter when the PDF already has a text layer
-- [ ] coarse map (one subagent) -> printed_toc.json + page_offset + chapters.json
+- [ ] coarse map (one subagent) -> printed_toc.json (entries + front_matter) + page_offset + chapters.json
 - [ ] choose depth: printed TOC by default; user request overrides
 - [ ] if body headings are required: full-extract each in-scope chapter, then fine-heading subagents (batches of 3-5)
-- [ ] merge outline.proposed.json (prepend front-matter bookmarks: cover / title page / copyright page / preface / contents, only where those pages exist)
+- [ ] merge outline.proposed.json (prepend `front_matter` from printed_toc.json: every real section before the printed TOC, in reading order, plus contents)
 - [ ] check-outline (cheap)
 - [ ] verify against page text (full chapter extract, or a window filled in for that bookmark)
 - [ ] fix / rerun failing chapters
@@ -102,7 +102,7 @@ Follow-up ranges use `--append` on `ocr` and `extract` so front matter stays in 
 
 ### 3. Coarse map
 
-Launch **one** subagent with the first 20–40 pages (`slice`). Wait for `printed_toc.json` and `chapters.json`. Align printed page numbers to PDF pages before cutting chapters.
+Launch **one** subagent with the first 20–40 pages (`slice`). Wait for `printed_toc.json` (including `front_matter`) and `chapters.json`. Align printed page numbers to PDF pages before cutting chapters. `front_matter` lists every real section before the printed TOC, not only cover / title page / copyright / preface.
 
 Printed TOC entries, after that alignment, are the default outline. They also define chapter ranges. If there is no printed TOC, split the body into ~30-page chunks (adjust at obvious chapter-sized font hints).
 
@@ -116,17 +116,24 @@ If there is no printed TOC, body text is the outline source. The default range i
 
 ### Front-matter bookmarks
 
-Regardless of the depth chosen above, also add level-1 bookmarks for these front-matter sections to the top of `outline.proposed.json` **when the PDF actually has them**:
+Bookmarks that sit before the printed table of contents come from the pages that are actually there, in reading order. They are not a fixed checklist. The coarse-map subagent records them as `front_matter` in `printed_toc.json` (see `references/artifacts.md` and `references/subagents.md`). When merging `outline.proposed.json`, prepend those entries, then the printed-TOC outline.
+
+Add one level-1 bookmark per distinct section before `toc_pages`. Skip a section the PDF does not have. Do not invent a page, and do not stop once the common sections below are accounted for — any other real section gets a bookmark too.
+
+Common sections, only when that page exists:
 
 - Cover (封面) — page 1 when the PDF opens with a cover; the page need not contain the literal word "封面" or "cover".
 - Title page (扉页) — the page near the front that repeats the book title and author (often page 2–3); it need not contain the literal word "扉页" or "title page".
 - Copyright page (版权页) — the page with publisher / ISBN / edition / CIP data, often the verso of the title page; it need not contain the literal word "版权页" or "copyright".
-- Preface (序言 / 前言 / 导言 / Preface / Foreword) — the page where it actually starts.
-- Contents (目录 / 目次 / Contents / Table of Contents) — the printed TOC page itself, when it is not already an outline entry.
+- Preface (序言 / 前言 / 导言 / Preface / Foreword) — when it starts before the printed TOC, the page where it actually starts.
 
-These sections usually do not appear in the printed TOC, so add them yourself from the front-matter text already in `pages.jsonl`; place them before the first body/chapter entry, in reading order. Presence is strictly opt-in: if the PDF has no such page, skip it silently — do not invent pages or guess from the body.
+Also bookmark every other distinct section on those pages, using that page's own heading as the title. Sections that often appear and are required when present include a half-title, series or imprint page, dedication, epigraph, acknowledgments, translator's or editor's note, how to use this book, a list of figures / tables / abbreviations, about the author, a map, or a second preface. If the page is its own section, include it even when it is not named here.
 
-Cover, Title page, Copyright page, and Contents are structural labels, not page headings: the label need not appear on the page (see `references/artifacts.md`). They still go through `check-outline`; verify them by page existence (cover = page 1; title page = the page repeating the title/author; copyright = the page carrying publisher/ISBN data; contents = `toc_pages`), not by title-text matching.
+Contents (目录 / 目次 / Contents / Table of Contents) bookmarks the printed TOC pages themselves (`toc_pages`). Place it after the bookmarks above and before the body outline, when it is not already an outline entry.
+
+A preface or similar section that starts after the printed TOC, and is not already an outline entry, still gets a bookmark at the page where it actually starts. Blank pages and ads get no bookmark.
+
+Cover, title page, copyright page, and contents are structural labels, not page headings: the label need not appear on the page (see `references/artifacts.md`). They still go through `check-outline`; verify them by page role (cover = page 1; title page = the page repeating the title/author; copyright = the page carrying publisher/ISBN data; contents = `toc_pages`), not by title-text matching. Every other front-matter bookmark uses the heading on its page; verify it the same way as a body heading.
 
 ### 5. Fine outline
 
@@ -156,4 +163,4 @@ Do not ingest `pages.jsonl` or chapter slices. You may read `meta.json`, `printe
 
 ## Report to the user
 
-Give: output PDF path, depth used (printed TOC or body headings), whether a full chapter extract ran, RapidOCR `--language` if OCR ran, bookmark count, which front-matter bookmarks (cover / title page / copyright page / preface / contents) were included, verify pass rate, remaining failures. Offer to rerun a named chapter or cap depth ("level 2 only").
+Give: output PDF path, depth used (printed TOC or body headings), whether a full chapter extract ran, RapidOCR `--language` if OCR ran, bookmark count, which bookmarks were placed before the printed TOC (taken from the book's actual front matter, including any section beyond cover / title page / copyright page / preface / contents), verify pass rate, remaining failures. Offer to rerun a named chapter or cap depth ("level 2 only").

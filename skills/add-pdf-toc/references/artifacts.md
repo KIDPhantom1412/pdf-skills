@@ -46,16 +46,25 @@ The orchestrator must **not** load this whole file. Use `slice` / `page-window` 
 ```json
 {
   "found": true,
-  "toc_pages": [3, 4, 5],
+  "toc_pages": [7, 8],
   "page_offset": 12,
   "notes": "Printed page 1 is PDF page 13",
+  "front_matter": [
+    {"level": 1, "title": "封面", "page": 1, "quote": "Book Title", "structural": true},
+    {"level": 1, "title": "扉页", "page": 2, "quote": "Book Title", "structural": true},
+    {"level": 1, "title": "版权页", "page": 3, "quote": "ISBN", "structural": true},
+    {"level": 1, "title": "献辞", "page": 4, "quote": "献辞", "structural": false},
+    {"level": 1, "title": "目录", "page": 7, "quote": "目录", "structural": true}
+  ],
   "entries": [
     {"level": 1, "title": "Chapter 1 Overview", "printed_page": 1, "pdf_page": 13}
   ]
 }
 ```
 
-If no printed TOC: `{"found": false, "entries": []}`.
+If no printed TOC: `{"found": false, "entries": [], "front_matter": []}`. Still fill `front_matter` for the real sections before the body.
+
+`front_matter` is every distinct section before the printed TOC, in reading order, plus a contents entry for `toc_pages` when a printed TOC exists. A preface (or similar) that starts after the TOC and is missing from `entries` belongs here too, at its real start page. Include a section only when that page exists. Common sections (cover, title page, copyright, preface, contents) are not a closed set: half-title, dedication, series page, translator's note, how-to, lists, and any other real section get an entry. `structural: true` is only for cover, title page, copyright, and contents, whose bookmark title need not appear on the page. Every other title is that page's own heading, and `quote` is copied from it. Blank pages and ads are omitted.
 
 `page_offset` is `pdf_page - printed_page` after aligning a chapter title in the body. Confirm at least two headings before trusting it.
 
@@ -83,7 +92,7 @@ If no printed TOC: `{"found": false, "entries": []}`.
 }
 ```
 
-`quote` is a short span copied from the page text. Do not invent body titles. Front-matter structural labels (cover / title page / preface / contents) are allowed; `quote` is still from that page.
+`quote` is a short span copied from the page text. Do not invent body titles. Structural labels are allowed only for cover, title page, copyright page, and contents; `quote` is still from that page. Any other bookmark before the printed TOC uses the heading actually printed on that page.
 
 ## Verification verdicts
 
