@@ -1,4 +1,4 @@
-# AddPdfToc
+# pdf-skills
 
 Agent skills for PDFs. The agent runs the workflow; the Python scripts never call a model.
 
@@ -14,7 +14,7 @@ Requires [Node.js](https://nodejs.org/) so `npx` works. No skills.sh account and
 npx skills add . -g
 
 # After the repo is on GitHub
-npx skills add KIDPhantom1412/AddPdfToc -g
+npx skills add KIDPhantom1412/pdf-skills -g
 ```
 
 List what the installer sees:
