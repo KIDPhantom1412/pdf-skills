@@ -1,6 +1,6 @@
 ---
 name: add-pdf-toc
-description: Add a hierarchical PDF bookmark outline (sidebar TOC) to searchable or scanned PDFs, OCR image-only pages when needed, then verify bookmarks against page text with subagents. Use when the user asks to add a table of contents, bookmarks, or outline to a PDF, or to make a scanned PDF searchable and navigable.
+description: Add a hierarchical PDF bookmark outline (sidebar TOC) to a searchable or scanned PDF. For scans, OCR only the pages needed to read headings, then verify bookmarks against page text with subagents. Use when the user asks to add a table of contents, bookmarks, or outline to a PDF, including a scanned PDF.
 compatibility: Requires uv.
 ---
 
@@ -25,20 +25,16 @@ uv run "$SCRIPT" check-deps
 
 If `uv` is missing, stop and tell the user to install it: https://docs.astral.sh/uv/getting-started/installation/ — do not fall back to pip or a harness venv. Do not add `--with` packages.
 
-## OCR language & bilingual texts
+## OCR language
 
-Do not hardcode a language in this skill. Before `ocr`:
+Do not hardcode a language. Before `ocr`:
 
 1. Guess the primary script from the cover, filename, user, or `meta.language_guess` (scans are often `unknown`).
-2. Read `rapidocr_lang_rec` from `check-deps` (RapidOCR's own `rapidocr --help` does **not** list language codes).
-3. Map the guess onto a `LangRec` value from that list. Use [RapidOCR model list](https://rapidai.github.io/RapidOCRDocs/main/model_list/) if the enum is ambiguous (e.g. German → `latin`).
-4. **Bilingual / Mixed text strategy (RapidOCR limitations)**:
-   - RapidOCR's recognition engine (`PP-OCRv6_rec`) is fundamentally single-model: it accepts only **one** `Rec.lang_type` per instance. There is no built-in "multi-language ensemble" or automatic cross-language switching.
-   - For language-learning materials and bilingual books (such as Chinese-Japanese, English-Chinese):
-     - **CJK Language Choice**: The `japan` recognition model contains Hiragana, Katakana, and standard Kanji (Kanji characters overlap significantly with Chinese Hanzi). For Japanese textbooks (`标日`), `--language japan` provides the highest accuracy for Japanese titles while maintaining acceptable Chinese recognition.
-     - **Chinese / English mix**: The default `ch` model recognizes Simplified Chinese, Punctuation, and Latin/English characters cleanly.
-     - **TOC Title Formatting**: If a heading in TOC is bilingual (e.g. `第16课 雇用 ①求人案内`), prioritize matching the section's primary native book language or the language used in the printed 目次.
-5. Pass the chosen code to `ocr --language`.
+2. Read `rapidocr_lang_rec` from `check-deps`.
+3. Map the guess onto a `LangRec` value from that list.
+4. Pass the chosen code to `ocr --language`.
+
+Bilingual books and RapidOCR's single-model limit: [references/language.md](references/language.md).
 
 ## Commands
 
@@ -91,7 +87,7 @@ For scanned PDFs (`needs_ocr: true`), **do not run full-book OCR upfront**—ful
    - Run OCR only on targeted chapter starting pages and section windows (`page-window` radius 1) for subagent verification and deeper heading extraction, rather than OCRing the entire book.
    - If the book lacks a printed TOC, split into ~30-page chunks and OCR chunks sequentially or in bounded batches.
 
-Pass `--out searchable.pdf` only if the user explicitly requested an invisible-text searchable PDF overlay. Skip a second `extract` unless you need font hints from a digital PDF.
+Do not pass `--out` to `ocr`. This step writes page text for headings only. To embed a searchable text layer, use the `add-pdf-ocr` skill. Skip a second `extract` unless you need font hints from a digital PDF.
 
 `extract` is used directly on digital/searchable PDFs without OCR. Subsequent AI reads **page-aligned JSONL only**, not screenshots.
 

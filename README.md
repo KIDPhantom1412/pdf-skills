@@ -1,13 +1,16 @@
-# add-pdf-toc
+# AddPdfToc
 
-Agent skill that adds a hierarchical **bookmark outline** (sidebar table of contents) to a PDF. Scanned files can be made searchable first. The agent runs the workflow and uses subagents on page slices; the Python scripts never call a model.
+Agent skills for PDFs. The agent runs the workflow; the Python scripts never call a model.
+
+- **add-pdf-toc** adds a hierarchical bookmark outline (sidebar table of contents). On a scan it OCRs only the pages needed to read headings.
+- **add-pdf-ocr** adds an invisible text layer so a scanned PDF becomes searchable. It does not add bookmarks.
 
 ## Install
 
 Requires [Node.js](https://nodejs.org/) so `npx` works. No skills.sh account and no marketplace submission.
 
 ```bash
-# This repo, user-level skill (any project)
+# This repo, user-level skills (any project)
 npx skills add . -g
 
 # After the repo is on GitHub
@@ -20,7 +23,7 @@ List what the installer sees:
 npx skills add . --list
 ```
 
-Without Node, copy `skills/add-pdf-toc/` to the user-level `~/.agents/skills/add-pdf-toc/` (or the current project's `.agents/skills/`).
+Without Node, copy `skills/add-pdf-toc/` and `skills/add-pdf-ocr/` to the user-level `~/.agents/skills/` (or the current project's `.agents/skills/`).
 
 ## Use
 
@@ -28,7 +31,11 @@ In your coding agent's chat, ask for example:
 
 > Add a table of contents to `D:\books\example.pdf`
 
-The agent should load this skill and run `uv run scripts/addpdftoc.py ...` (uv is required). OCR only if needed. Bookmarks come from body headings (printed TOC is a routing hint), then entries are verified against page text.
+The agent should load **add-pdf-toc** and run `uv run scripts/addpdftoc.py ...` (uv is required). It OCRs heading pages only when the PDF has no text layer. Bookmarks come from body headings (printed TOC is a routing hint), then entries are verified against page text.
+
+> Add an OCR text layer to `D:\books\example.pdf`
+
+The agent should load **add-pdf-ocr** and run `uv run scripts/addpdfocr.py ...`. The searchable file is `<stem>.ocr.pdf` next to the source.
 
 ## Layout
 
@@ -36,10 +43,21 @@ The agent should load this skill and run `uv run scripts/addpdftoc.py ...` (uv i
 skills/add-pdf-toc/
   SKILL.md
   scripts/addpdftoc.py
+  scripts/ocr_engine.py
   scripts/requirements.txt
   references/artifacts.md
+  references/language.md
   references/subagents.md
+skills/add-pdf-ocr/
+  SKILL.md
+  scripts/addpdfocr.py
+  scripts/ocr_engine.py
+  scripts/requirements.txt
+  references/artifacts.md
+  references/language.md
 ```
+
+`ocr_engine.py` and `references/language.md` are the same file in both skills so each skill still works if it is installed alone. The copies under `add-pdf-ocr` are canonical.
 
 ## Runtime
 

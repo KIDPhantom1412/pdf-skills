@@ -5,5 +5,7 @@ __pycache__/
 *.py[cod]
 .python-version
 *.with-toc.pdf
+*.ocr.pdf
+.addpdfocr/
 /*.pdf
 .DS_Store
