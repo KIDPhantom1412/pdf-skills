@@ -41,20 +41,22 @@ Final PDF: `<stem>.ocr.pdf` next to the source (or a path passed with `--out` wh
   "start": 1,
   "end": 320,
   "pages_done": 320,
+  "skipped_pages": 0,
+  "appended": false,
   "overlay_textboxes": 8400,
   "overlay_errors": 0,
   "work_dir": "C:/proj/.addpdfocr/book"
 }
 ```
 
-`output` is the searchable PDF. `overlay_textboxes` counts invisible text runs written into that file.
+`output` is the searchable PDF. `overlay_textboxes` counts invisible text runs written into that file. `--append` skips pages whose `page` already exists in the JSONL and counts them in `skipped_pages`; it does not merge text layers into an existing output PDF.
 
-## `pages.jsonl` (RapidOCR, optional via `--pages-out`)
+## `pages.jsonl` (RapidOCR)
 
-Written by default to `<work>/pages.jsonl`. One JSON object per line:
+Written by default to `<work>/pages.jsonl`; override the location with `--pages-out`. One JSON object per line:
 
 ```json
 {"page": 12, "char_count": 980, "text": "....", "font_heading_hints": [], "ocr_engine": "rapidocr", "ocr_line_count": 40}
 ```
 
-This file is a side product of the text layer. It is not a bookmark outline.
+This file is a side product of the text layer. It is not a bookmark outline. `pages-present --pages <work>/pages.jsonl [--start N --end M]` lists the pages it contains and the gaps in a range, so the agent can check coverage without reading the file.

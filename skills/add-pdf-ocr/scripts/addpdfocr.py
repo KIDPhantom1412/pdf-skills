@@ -24,6 +24,7 @@ from ocr_engine import (  # noqa: E402
     cmd_check_deps,
     cmd_detect,
     cmd_ocr,
+    cmd_pages_present,
 )
 
 WORK_DIR_NAME = ".addpdfocr"
@@ -54,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     ocr.add_argument("--append", action="store_true", help="Append OCR lines to pages_out instead of overwriting")
     ocr.add_argument("--workers", type=int, default=1, help="Number of parallel worker processes for OCR (default 1)")
 
+    pages_p = sub.add_parser("pages-present", help="List pages already in a pages.jsonl, and gaps in a range")
+    pages_p.add_argument("--pages", required=True)
+    pages_p.add_argument("--start", type=int)
+    pages_p.add_argument("--end", type=int)
+
     return parser
 
 
@@ -67,6 +73,7 @@ def main(argv: list[str] | None = None) -> None:
         "check-deps": cmd_check_deps,
         "detect": cmd_detect,
         "ocr": cmd_ocr,
+        "pages-present": cmd_pages_present,
     }
     commands[args.cmd](args)
 

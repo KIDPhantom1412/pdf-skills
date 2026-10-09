@@ -33,6 +33,7 @@ from ocr_engine import (  # noqa: E402
     cmd_check_deps,
     cmd_detect,
     cmd_ocr,
+    cmd_pages_present,
 )
 
 WORK_DIR_NAME = ".addpdftoc"
@@ -93,11 +94,22 @@ def cmd_extract(args: argparse.Namespace) -> None:
     if start < 1 or end < start or end > page_count:
         doc.close()
         _die(f"Invalid page range {start}-{end} for page_count={page_count}")
+    existing_pages: set[int] = set()
+    if args.append and out.is_file():
+        for row in _iter_pages(out):
+            try:
+                existing_pages.add(int(row["page"]))
+            except (KeyError, TypeError, ValueError):
+                continue
     count = 0
+    skipped_pages = 0
     mode = "a" if args.append else "w"
     try:
         with out.open(mode, encoding="utf-8") as handle:
             for index in range(start, end + 1):
+                if index in existing_pages:
+                    skipped_pages += 1
+                    continue
                 page = doc[index - 1]
                 text = page.get_text("text") or ""
                 record = {
@@ -116,6 +128,7 @@ def cmd_extract(args: argparse.Namespace) -> None:
         "source_pdf": str(pdf),
         "pages_jsonl": str(out),
         "page_count": count,
+        "skipped_pages": skipped_pages,
         "start": start,
         "end": end,
         "work_dir": str(work),
@@ -301,6 +314,11 @@ def build_parser() -> argparse.ArgumentParser:
     check_o = sub.add_parser("check-outline", help="Cheap structural checks on an outline JSON")
     check_o.add_argument("--outline", required=True)
 
+    pages_p = sub.add_parser("pages-present", help="List pages already in a pages.jsonl, and gaps in a range")
+    pages_p.add_argument("--pages", required=True)
+    pages_p.add_argument("--start", type=int)
+    pages_p.add_argument("--end", type=int)
+
     write = sub.add_parser("write-toc", help="Write PDF bookmarks from outline JSON")
     write.add_argument("pdf")
     write.add_argument("--outline", required=True)
@@ -320,6 +338,7 @@ def main(argv: list[str] | None = None) -> None:
         "extract": cmd_extract,
         "slice": cmd_slice,
         "page-window": cmd_page_window,
+        "pages-present": cmd_pages_present,
         "check-outline": cmd_check_outline,
         "write-toc": cmd_write_toc,
     }

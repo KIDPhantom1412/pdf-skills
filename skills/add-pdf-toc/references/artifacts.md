@@ -22,6 +22,8 @@ Work directory default: `./.addpdftoc/<pdf-stem>/` relative to the agent's cwd.
 }
 ```
 
+`needs_ocr` is true when at least 40% of pages have almost no extractable text.
+
 ## `pages.jsonl` (from `extract`)
 
 One JSON object per line:
@@ -37,7 +39,7 @@ One JSON object per line:
 }
 ```
 
-The orchestrator must **not** load this whole file. Use `slice` / `page-window`.
+The orchestrator must **not** load this whole file. Use `slice` / `page-window` / `pages-present`. `extract --append` and `ocr --append` skip pages whose `page` is already present (`skipped_pages` in the command output); `pages-present --pages <work>/pages.jsonl [--start N --end M]` lists present pages and the gaps in a range.
 
 ## `printed_toc.json` (from the coarse-map subagent, may be empty)
 

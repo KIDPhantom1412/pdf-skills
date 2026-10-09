@@ -354,13 +354,27 @@ def _ocr_rapidocr(args: argparse.Namespace, pdf: Path, work: Path, language: str
     saved_tmp = False
     tmp_pdf = None
 
+    existing_pages: set[int] = set()
+    if args.append and jsonl_path.is_file():
+        with jsonl_path.open(encoding="utf-8") as scan:
+            for line in scan:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    existing_pages.add(int(json.loads(line)["page"]))
+                except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                    continue
+    todo = [index for index in range(start, end + 1) if index not in existing_pages]
+    skipped_pages = (end - start + 1) - len(todo)
+
     mode = "a" if args.append else "w"
     try:
         with jsonl_path.open(mode, encoding="utf-8") as handle:
-            if workers > 1 and (end - start + 1) > 1:
+            if workers > 1 and len(todo) > 1:
                 from concurrent.futures import ProcessPoolExecutor
 
-                tasks = [(str(pdf), index, zoom) for index in range(start, end + 1)]
+                tasks = [(str(pdf), index, zoom) for index in todo]
                 with ProcessPoolExecutor(max_workers=workers, initializer=_ocr_worker_init, initargs=(rec_lang,)) as executor:
                     for index, lines, err in executor.map(_ocr_worker_task, tasks, chunksize=1):
                         if err:
@@ -405,7 +419,7 @@ def _ocr_rapidocr(args: argparse.Namespace, pdf: Path, work: Path, language: str
                         )
             else:
                 engine = RapidOCR(params={"Rec.lang_type": rec_lang})
-                for index in range(start, end + 1):
+                for index in todo:
                     page = doc[index - 1]
                     pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
                     try:
@@ -474,6 +488,8 @@ def _ocr_rapidocr(args: argparse.Namespace, pdf: Path, work: Path, language: str
         "start": start,
         "end": end,
         "pages_done": pages_done,
+        "skipped_pages": skipped_pages,
+        "appended": bool(args.append),
         "overlay_textboxes": overlay_written,
         "overlay_errors": overlay_errors,
         "work_dir": str(work),
@@ -528,6 +544,40 @@ def _ocr_ocrmypdf(args: argparse.Namespace, pdf: Path, work: Path, language: str
         "language": language,
         "work_dir": str(work),
     }
+
+
+def cmd_pages_present(args: argparse.Namespace) -> None:
+    jsonl = Path(args.pages).expanduser().resolve()
+    if not jsonl.is_file():
+        _die(f"pages.jsonl not found: {jsonl}")
+    pages: set[int] = set()
+    with jsonl.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                pages.add(int(json.loads(line)["page"]))
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+    ordered = sorted(pages)
+    start = args.start if args.start is not None else (ordered[0] if ordered else None)
+    end = args.end if args.end is not None else (ordered[-1] if ordered else None)
+    missing: list[int] = []
+    if start is not None and end is not None:
+        missing = [index for index in range(start, end + 1) if index not in pages]
+    _dump(
+        {
+            "ok": True,
+            "pages_jsonl": str(jsonl),
+            "count": len(ordered),
+            "pages": ordered,
+            "start": start,
+            "end": end,
+            "missing_count": len(missing),
+            "missing": missing,
+        }
+    )
 
 
 def cmd_ocr(args: argparse.Namespace) -> None:

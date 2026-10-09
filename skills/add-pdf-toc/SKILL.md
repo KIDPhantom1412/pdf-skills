@@ -1,6 +1,6 @@
 ---
 name: add-pdf-toc
-description: Add a hierarchical PDF bookmark outline (sidebar TOC) to a searchable or scanned PDF. Default depth is the printed TOC. Deeper headings require a full text extract of each in-scope chapter before the fine-heading subagents run. Use when the user asks to add a table of contents, bookmarks, or outline to a PDF, including a scanned PDF.
+description: Add a hierarchical PDF bookmark outline (sidebar TOC) to a searchable or scanned PDF. Default depth is the printed TOC; deeper body headings are opt-in. Use when the user asks to add a table of contents, bookmarks, or outline to a PDF, including a scanned PDF.
 compatibility: Requires uv.
 ---
 
@@ -25,6 +25,10 @@ uv run "$SCRIPT" check-deps
 
 If `uv` is missing, stop and tell the user to install it: https://docs.astral.sh/uv/getting-started/installation/ — do not fall back to pip or a harness venv. Do not add `--with` packages.
 
+`uv run` installs the PEP 723 dependencies automatically, so under `uv run` these flags are always true. If `check-deps` reports `pymupdf: false` or `ocr_ready: false`, the script was most likely run outside `uv run` (e.g. with a bare interpreter) — re-run it with `uv run`. If the flags are still false, stop and tell the user; do not install packages or switch engines.
+
+Command examples use POSIX shell syntax (`"$VAR"`); adapt quoting and variable expansion to the current shell (PowerShell on Windows).
+
 ## OCR language
 
 Do not hardcode a language. Before `ocr`:
@@ -40,13 +44,19 @@ Bilingual books and RapidOCR's single-model limit: [references/language.md](refe
 
 ```bash
 uv run "$SCRIPT" detect <pdf> --work-dir <work>
-uv run "$SCRIPT" ocr --engine rapidocr <pdf> --work-dir <work> --language <LangRec> [--start N --end M] [--append]
+uv run "$SCRIPT" ocr --engine rapidocr <pdf> --work-dir <work> --language <LangRec> [--start N --end M] [--append] [--workers K]
 uv run "$SCRIPT" extract <searchable-or-original.pdf> --work-dir <work> [--start N --end M] [--append]
 uv run "$SCRIPT" slice --pages <work>/pages.jsonl --start N --end M --out <work>/slices/ch-01.jsonl
 uv run "$SCRIPT" page-window --pages <work>/pages.jsonl --page N --radius 1
+uv run "$SCRIPT" pages-present --pages <work>/pages.jsonl [--start N --end M]
 uv run "$SCRIPT" check-outline --outline <work>/outline.proposed.json
 uv run "$SCRIPT" write-toc <pdf> --outline <work>/outline.verified.json --out <stem>.with-toc.pdf
 ```
+
+- Do not pass `--out` to `ocr` in this skill: that would write a searchable PDF (use the `add-pdf-ocr` skill for that). Headings only need the JSONL, which defaults to `<work>/pages.jsonl` (override with `--pages-out`).
+- `--workers K` runs K parallel OCR worker processes — use it for long scan ranges.
+- Always pass `--engine rapidocr`. If `check-deps` shows `rapidocr: false`, stop and tell the user; do not switch to `ocrmypdf` (different language codes, and this workflow depends on the JSONL).
+- On `--append`, `ocr` / `extract` skip pages already present in the JSONL and report them in `skipped_pages`. Use `pages-present` to check which pages of a range are still missing instead of reading the JSONL.
 
 JSON field definitions: [references/artifacts.md](references/artifacts.md). Subagent roles, prompts, and parallelism: [references/subagents.md](references/subagents.md).
 
@@ -66,14 +76,15 @@ Copy and tick:
 - [ ] check-outline (cheap)
 - [ ] verify against page text (full chapter extract, or a window filled in for that bookmark)
 - [ ] fix / rerun failing chapters
-- [ ] write-toc + report.md
+- [ ] apply verdicts -> outline.verified.json (keep match, adopt suggested_page, drop or fix wrong/not_found)
+- [ ] write-toc + report.md (report.md is yours to write; there is no script command for it)
 ```
 
 Serial until `chapters.json`, `page_offset`, and the depth decision exist. Full-extract a chapter before its fine-heading subagent. Then verify. Do not start the next stage until the previous barrier is done.
 
 ### 1. Detect
 
-Run `detect`. Existing bookmarks in the source PDF will not block the process (final output writes to a separate `<stem>.with-toc.pdf` file with a clean outline by default, leaving the original file intact; do not interrupt to ask the user unless they explicitly asked to preserve or merge old bookmarks).
+Run `detect`. It writes the result to `<work>/meta.json` and prints the same JSON to stdout — read `needs_ocr`, `language_guess`, and `has_existing_toc` from there. Existing bookmarks in the source PDF will not block the process (final output writes to a separate `<stem>.with-toc.pdf` file with a clean outline by default, leaving the original file intact; do not interrupt to ask the user unless they explicitly asked to preserve or merge old bookmarks).
 
 ### 2. Page text
 
@@ -83,11 +94,11 @@ Searchable PDFs (`needs_ocr: false`) use `extract`. Scans (`needs_ocr: true`) us
 
 Front matter first, for the coarse map:
 
-- Scan: OCR pages 1–30 with `--pages-out <work>/pages.jsonl`.
+- Scan: OCR pages 1–30 (the JSONL defaults to `<work>/pages.jsonl`; do not pass `--out`).
 - Searchable: `extract` that same span.
 - After the coarse map, lock `page_offset = pdf_page - printed_page` on 2–3 chapter-start pages. On a scan, OCR those pages with `--append`.
 
-Follow-up ranges use `--append` on `ocr` and `extract` so front matter stays in `pages.jsonl`. Do not append pages that are already in the file.
+Follow-up ranges use `--append` on `ocr` and `extract` so front matter stays in `pages.jsonl`. `--append` skips pages already present (see `skipped_pages` in the command output); use `pages-present` to check which pages of a range are still missing instead of reading the JSONL.
 
 ### 3. Coarse map
 
@@ -119,11 +130,11 @@ Merge into `outline.proposed.json`: printed TOC as the chapter backbone, body he
 
 Verify **before** the final `write-toc` (verdicts use JSONL, not the PDF). Launch **one verify subagent per chapter** in parallel (or one batch if the outline is small). Each gets `page-window` for its entries (`radius` 1, or 2 after `not_found`).
 
-The window must already contain those pages. After a full chapter extract, read `pages.jsonl`. For a printed-TOC outline, `ocr --append` or `extract --append` only the missing bookmark pages, then read the window. Do not treat that sample as a source of new headings.
+The window must already contain those pages. After a full chapter extract, read `pages.jsonl`. For a printed-TOC outline, use `pages-present` to list the missing bookmark pages, `ocr --append` / `extract --append` only those, then read the window. Do not treat that sample as a source of new headings.
 
 The title must appear near the **start of the target page**, not merely anywhere in the window (unit previews and running headers do not count). Apply `suggested_page` for real `off_by_n`. If a chapter's fail rate is high and that chapter had a fine-heading pass, rerun **that chapter's** fine-heading subagent only, then `check-outline` and verify again.
 
-Then `write-toc` and `report.md`.
+Then merge the verdicts into `outline.verified.json` yourself: keep `match`, adopt `suggested_page` for real `off_by_n`, drop or fix `wrong` / `not_found`. Then run `write-toc` and write `report.md` yourself (there is no script command for it).
 
 ## Orchestrator context
 

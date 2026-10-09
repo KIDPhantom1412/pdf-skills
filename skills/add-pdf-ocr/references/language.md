@@ -12,3 +12,5 @@ Do not hardcode a language. Before `ocr`:
      - **Chinese / English mix:** The default `ch` model recognizes Simplified Chinese, punctuation, and Latin/English characters.
      - **TOC title formatting:** If a heading is bilingual (e.g. `第16课 雇用 ①求人案内`), prefer the section's primary book language, or the language used in the printed 目次.
 5. Pass the chosen code to `ocr --language`.
+
+This file is shared verbatim between the `add-pdf-ocr` and `add-pdf-toc` skills. Keep both copies identical.
