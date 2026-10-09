@@ -2,7 +2,7 @@
 
 Agent skills for PDFs. The agent runs the workflow; the Python scripts never call a model.
 
-- **add-pdf-toc** adds a hierarchical bookmark outline (sidebar table of contents). On a scan it OCRs only the pages needed to read headings.
+- **add-pdf-toc** adds a hierarchical bookmark outline (sidebar table of contents). The default depth is the printed TOC. Deeper headings use a full text extract of each in-scope chapter.
 - **add-pdf-ocr** adds an invisible text layer so a scanned PDF becomes searchable. It does not add bookmarks.
 
 ## Install
@@ -31,7 +31,7 @@ In your coding agent's chat, ask for example:
 
 > Add a table of contents to `D:\books\example.pdf`
 
-The agent should load **add-pdf-toc** and run `uv run scripts/addpdftoc.py ...` (uv is required). It OCRs heading pages only when the PDF has no text layer. Bookmarks come from body headings (printed TOC is a routing hint), then entries are verified against page text.
+The agent should load **add-pdf-toc** and run `uv run scripts/addpdftoc.py ...` (uv is required). The default outline matches the printed TOC. Deeper headings come from a full text extract of each in-scope chapter (OCR on a scan, `extract` when a text layer already exists), then entries are verified against page text.
 
 > Add an OCR text layer to `D:\books\example.pdf`
 

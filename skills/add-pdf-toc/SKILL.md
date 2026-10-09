@@ -1,12 +1,12 @@
 ---
 name: add-pdf-toc
-description: Add a hierarchical PDF bookmark outline (sidebar TOC) to a searchable or scanned PDF. For scans, OCR only the pages needed to read headings, then verify bookmarks against page text with subagents. Use when the user asks to add a table of contents, bookmarks, or outline to a PDF, including a scanned PDF.
+description: Add a hierarchical PDF bookmark outline (sidebar TOC) to a searchable or scanned PDF. Default depth is the printed TOC. Deeper headings require a full text extract of each in-scope chapter before the fine-heading subagents run. Use when the user asks to add a table of contents, bookmarks, or outline to a PDF, including a scanned PDF.
 compatibility: Requires uv.
 ---
 
 # Add PDF TOC
 
-The agent drives this workflow. Python scripts never call a model. Do not write one-off PyMuPDF snippets; use `scripts/addpdftoc.py`.
+The agent drives this workflow. Do not write one-off PyMuPDF snippets; use `scripts/addpdftoc.py`.
 
 ## Resolve paths
 
@@ -40,8 +40,8 @@ Bilingual books and RapidOCR's single-model limit: [references/language.md](refe
 
 ```bash
 uv run "$SCRIPT" detect <pdf> --work-dir <work>
-uv run "$SCRIPT" ocr --engine rapidocr <pdf> --work-dir <work> --language <LangRec> [--start N --end M]
-uv run "$SCRIPT" extract <searchable-or-original.pdf> --work-dir <work> [--start N --end M]
+uv run "$SCRIPT" ocr --engine rapidocr <pdf> --work-dir <work> --language <LangRec> [--start N --end M] [--append]
+uv run "$SCRIPT" extract <searchable-or-original.pdf> --work-dir <work> [--start N --end M] [--append]
 uv run "$SCRIPT" slice --pages <work>/pages.jsonl --start N --end M --out <work>/slices/ch-01.jsonl
 uv run "$SCRIPT" page-window --pages <work>/pages.jsonl --page N --radius 1
 uv run "$SCRIPT" check-outline --outline <work>/outline.proposed.json
@@ -57,59 +57,71 @@ Copy and tick:
 ```
 - [ ] check-deps
 - [ ] detect
-- [ ] if needs_ocr: look up LangRec, then Phase 1 front-matter OCR (--start 1 --end 30)
-- [ ] extract only if digital / font hints needed
+- [ ] if needs_ocr: look up LangRec, then front-matter OCR (--start 1 --end 30)
+- [ ] extract front matter when the PDF already has a text layer
 - [ ] coarse map (one subagent) -> printed_toc.json + page_offset + chapters.json
-- [ ] fine headings: chapter subagents in bounded batches (3-5 parallel)
+- [ ] choose depth: printed TOC by default; user request overrides
+- [ ] if body headings are required: full-extract each in-scope chapter, then fine-heading subagents (batches of 3-5)
 - [ ] merge outline.proposed.json
 - [ ] check-outline (cheap)
-- [ ] verify: targeted page-window OCR & subagent verification
+- [ ] verify against page text (full chapter extract, or a window filled in for that bookmark)
 - [ ] fix / rerun failing chapters
 - [ ] write-toc + report.md
 ```
 
-Serial until `chapters.json` and `page_offset` exist. Then fine-heading subagents in bounded parallel batches; then verify subagents. Do not start the next stage until the previous barrier is done.
+Serial until `chapters.json`, `page_offset`, and the depth decision exist. Full-extract a chapter before its fine-heading subagent. Then verify. Do not start the next stage until the previous barrier is done.
 
 ### 1. Detect
 
 Run `detect`. Existing bookmarks in the source PDF will not block the process (final output writes to a separate `<stem>.with-toc.pdf` file with a clean outline by default, leaving the original file intact; do not interrupt to ask the user unless they explicitly asked to preserve or merge old bookmarks).
 
-### 2. Text layer (Two-Phase Strategy)
+### 2. Page text
 
-For scanned PDFs (`needs_ocr: true`), **do not run full-book OCR upfront**—full-book OCR across hundreds of pages is slow and CPU-heavy. Instead, use a **two-phase OCR workflow**:
+Read **page-aligned JSONL only**, not screenshots. Do not pass `--out` to `ocr` here. This step writes page text for headings. To embed a searchable text layer, use the `add-pdf-ocr` skill.
 
-1. **Phase 1 (Front-Matter & TOC Skeleton)**:
-   - OCR only the front matter (typically pages 1 to 25–40, e.g. `--start 1 --end 30`) using `--pages-out <work>/pages.jsonl`.
-   - Run coarse mapping on this slice to find `printed_toc.json` and calculate `page_offset = pdf_page - printed_page`.
-   - Sample 2–3 early body chapter start pages with `--start N --end N` to verify and lock in `page_offset`.
-2. **Phase 2 (Targeted Verification Sampling)**:
-   - If a reliable printed TOC and offset are established, the outline backbone can be mapped directly.
-   - Run OCR only on targeted chapter starting pages and section windows (`page-window` radius 1) for subagent verification and deeper heading extraction, rather than OCRing the entire book.
-   - If the book lacks a printed TOC, split into ~30-page chunks and OCR chunks sequentially or in bounded batches.
+Searchable PDFs (`needs_ocr: false`) use `extract`. Scans (`needs_ocr: true`) use `ocr`. Do not OCR a scan from cover to end before the depth decision.
 
-Do not pass `--out` to `ocr`. This step writes page text for headings only. To embed a searchable text layer, use the `add-pdf-ocr` skill. Skip a second `extract` unless you need font hints from a digital PDF.
+Front matter first, for the coarse map:
 
-`extract` is used directly on digital/searchable PDFs without OCR. Subsequent AI reads **page-aligned JSONL only**, not screenshots.
+- Scan: OCR pages 1–30 with `--pages-out <work>/pages.jsonl`.
+- Searchable: `extract` that same span.
+- After the coarse map, lock `page_offset = pdf_page - printed_page` on 2–3 chapter-start pages. On a scan, OCR those pages with `--append`.
+
+Follow-up ranges use `--append` on `ocr` and `extract` so front matter stays in `pages.jsonl`. Do not append pages that are already in the file.
 
 ### 3. Coarse map
 
-Launch **one** subagent with the first 20–40 pages (`slice`). Wait for `printed_toc.json` and `chapters.json`. Printed TOC is a routing skeleton, not the final ebook TOC. Align printed page numbers to PDF pages before cutting chapters.
+Launch **one** subagent with the first 20–40 pages (`slice`). Wait for `printed_toc.json` and `chapters.json`. Align printed page numbers to PDF pages before cutting chapters.
 
-If there is no printed TOC, split into ~30-page chunks (adjust at obvious chapter-sized font hints).
+Printed TOC entries, after that alignment, are the default outline. They also define chapter ranges. If there is no printed TOC, split the body into ~30-page chunks (adjust at obvious chapter-sized font hints).
 
-### 4. Fine outline
+### 4. Heading depth
 
-Launch fine-heading subagents by chapter (or chunk).
+Default depth is the printed TOC's own depth. Use those entries as the outline. Do not run fine-heading subagents, and do not extract chapter bodies for new headings.
+
+The user request overrides that default. Honor a depth cap ("level 2 only"), a page range, named chapters, or an explicit ask for section or subsection headings. Full-extract and fine-heading only chapters inside that request.
+
+If there is no printed TOC, body text is the outline source. The default range is the whole book. The same user limits narrow it.
+
+### 5. Fine outline
+
+Run this step only when section 4 requires body headings.
+
+Full-extract each in-scope chapter first. Every PDF page from `start_page` to `end_page` must already be a line in `pages.jsonl`. A chapter-start page or a `page-window` sample is not enough. Scan: `ocr --append` that range. Searchable: `extract --append` that range. If any page is missing, fill it in and do not launch that chapter's subagent.
+
+Then launch fine-heading subagents by chapter (or chunk).
 - **Concurrency control:** When books have many chapters (e.g. 15–30 chapters), do not flood the API with dozens of concurrent subagents at once. Launch in bounded parallel batches of 3–5 chapters to avoid platform rate limits (`RateLimitError`, `resource_exhausted`) and maintain consistent heading depth.
-- Each agent receives only its slice + the printed TOC fragment for that chapter. If one fails, retry **that** subagent; do not read its JSONL yourself.
+- Each agent receives only its complete slice + the printed TOC fragment for that chapter. If one fails, retry **that** subagent; do not read its JSONL yourself.
 
-Merge into `outline.proposed.json`: printed TOC as chapter/section backbone, body headings as deeper levels. Run `check-outline`. Fix level jumps and backward pages before verify (note: for right-to-left / reverse-bound Japanese classical texts or appendices reading backwards, handle leaf sections carefully).
+Merge into `outline.proposed.json`: printed TOC as the chapter backbone, body headings as deeper levels. If this step did not run, `outline.proposed.json` is the aligned printed TOC. Run `check-outline`. Fix level jumps and backward pages before verify (note: for right-to-left / reverse-bound Japanese classical texts or appendices reading backwards, handle leaf sections carefully).
 
-### 5. Verify and write
+### 6. Verify and write
 
 Verify **before** the final `write-toc` (verdicts use JSONL, not the PDF). Launch **one verify subagent per chapter** in parallel (or one batch if the outline is small). Each gets `page-window` for its entries (`radius` 1, or 2 after `not_found`).
 
-The title must appear near the **start of the target page**, not merely anywhere in the window (unit previews and running headers do not count). Apply `suggested_page` for real `off_by_n`. If a chapter's fail rate is high, rerun **that chapter's** fine-heading subagent only, then `check-outline` and verify again.
+The window must already contain those pages. After a full chapter extract, read `pages.jsonl`. For a printed-TOC outline, `ocr --append` or `extract --append` only the missing bookmark pages, then read the window. Do not treat that sample as a source of new headings.
+
+The title must appear near the **start of the target page**, not merely anywhere in the window (unit previews and running headers do not count). Apply `suggested_page` for real `off_by_n`. If a chapter's fail rate is high and that chapter had a fine-heading pass, rerun **that chapter's** fine-heading subagent only, then `check-outline` and verify again.
 
 Then `write-toc` and `report.md`.
 
@@ -119,4 +131,4 @@ Do not ingest `pages.jsonl` or chapter slices. You may read `meta.json`, `printe
 
 ## Report to the user
 
-Give: output PDF path, whether OCR ran, RapidOCR `--language`, bookmark count, verify pass rate, remaining failures. Offer to rerun a named chapter or cap depth ("level 2 only").
+Give: output PDF path, depth used (printed TOC or body headings), whether a full chapter extract ran, RapidOCR `--language` if OCR ran, bookmark count, verify pass rate, remaining failures. Offer to rerun a named chapter or cap depth ("level 2 only").

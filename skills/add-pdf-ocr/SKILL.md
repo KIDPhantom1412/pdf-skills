@@ -6,7 +6,7 @@ compatibility: Requires uv.
 
 # Add PDF OCR
 
-The agent drives this workflow. Python scripts never call a model. Do not write one-off OCR snippets; use `scripts/addpdfocr.py`.
+The agent drives this workflow. Do not write one-off OCR snippets; use `scripts/addpdfocr.py`.
 
 This skill writes a searchable PDF. It does not add bookmarks. For a sidebar table of contents, use the `add-pdf-toc` skill.
 

@@ -3,13 +3,15 @@
 The orchestrator never attaches `pages.jsonl` and never reads a chapter slice to finish a failed agent's work. Retry that agent instead.
 
 ```
-detect → ocr → coarse (1, serial)
-                 ↓ barrier: chapters.json
-              fine headings × N (parallel, one per chapter)
-                 ↓ barrier: merge + check-outline
-              verify × M (parallel, one per chapter)
-                 ↓
-              write-toc
+detect → front-matter text → coarse (1, serial)
+                                ↓ barrier: chapters.json + depth
+                             full-extract in-scope chapters (only when body headings are required)
+                                ↓
+                             fine headings × N (parallel, one per chapter)
+                                ↓ barrier: merge + check-outline
+                             verify × M (parallel, one per chapter)
+                                ↓
+                             write-toc
 ```
 
 Launch each parallel group in bounded batches (3–5 subagents per batch). A platform `resource_exhausted` or rate limit on one agent is not a reason to serialize everything; retry the missing chapter.
@@ -31,11 +33,15 @@ Do not emit the detailed ebook outline here. Front matter may be one `front` cha
 
 ## Fine headings (one subagent per chapter, parallel)
 
+The orchestrator launches this role only when the outline must go deeper than the printed TOC, or there is no printed TOC. The slice is a full extract of the chapter, not a sample.
+
 Input:
 
-- Slice for `start_page`–`end_page`
+- Slice for `start_page`–`end_page`, with every page in that range present
 - Printed TOC entries for this chapter (may be empty)
 - Font hints already in the JSONL
+
+If any page in the range is missing, do not guess titles for the gap. Stop and name the missing pages so the orchestrator can extract them and retry.
 
 Task: extract a finer outline than the printed TOC from **body headings**. Rules:
 

@@ -94,8 +94,9 @@ def cmd_extract(args: argparse.Namespace) -> None:
         doc.close()
         _die(f"Invalid page range {start}-{end} for page_count={page_count}")
     count = 0
+    mode = "a" if args.append else "w"
     try:
-        with out.open("w", encoding="utf-8") as handle:
+        with out.open(mode, encoding="utf-8") as handle:
             for index in range(start, end + 1):
                 page = doc[index - 1]
                 text = page.get_text("text") or ""
@@ -119,6 +120,7 @@ def cmd_extract(args: argparse.Namespace) -> None:
         "end": end,
         "work_dir": str(work),
         "hints": bool(args.hints),
+        "append": bool(args.append),
     }
     (work / "extract.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     _dump(payload)
@@ -283,6 +285,7 @@ def build_parser() -> argparse.ArgumentParser:
     extract.add_argument("--end", type=int)
     extract.add_argument("--hints", action="store_true", default=True)
     extract.add_argument("--no-hints", action="store_false", dest="hints")
+    extract.add_argument("--append", action="store_true", help="Append page lines to the output JSONL instead of overwriting")
 
     slice_p = sub.add_parser("slice", help="Slice pages.jsonl to a page range")
     slice_p.add_argument("--pages", required=True)
