@@ -72,7 +72,7 @@ Copy and tick:
 - [ ] coarse map (one subagent) -> printed_toc.json + page_offset + chapters.json
 - [ ] choose depth: printed TOC by default; user request overrides
 - [ ] if body headings are required: full-extract each in-scope chapter, then fine-heading subagents (batches of 3-5)
-- [ ] merge outline.proposed.json
+- [ ] merge outline.proposed.json (prepend front-matter bookmarks: cover / title page / copyright page / preface / contents, only where those pages exist)
 - [ ] check-outline (cheap)
 - [ ] verify against page text (full chapter extract, or a window filled in for that bookmark)
 - [ ] fix / rerun failing chapters
@@ -114,6 +114,20 @@ The user request overrides that default. Honor a depth cap ("level 2 only"), a p
 
 If there is no printed TOC, body text is the outline source. The default range is the whole book. The same user limits narrow it.
 
+### Front-matter bookmarks
+
+Regardless of the depth chosen above, also add level-1 bookmarks for these front-matter sections to the top of `outline.proposed.json` **when the PDF actually has them**:
+
+- Cover (封面) — page 1 when the PDF opens with a cover; the page need not contain the literal word "封面" or "cover".
+- Title page (扉页) — the page near the front that repeats the book title and author (often page 2–3); it need not contain the literal word "扉页" or "title page".
+- Copyright page (版权页) — the page with publisher / ISBN / edition / CIP data, often the verso of the title page; it need not contain the literal word "版权页" or "copyright".
+- Preface (序言 / 前言 / 导言 / Preface / Foreword) — the page where it actually starts.
+- Contents (目录 / 目次 / Contents / Table of Contents) — the printed TOC page itself, when it is not already an outline entry.
+
+These sections usually do not appear in the printed TOC, so add them yourself from the front-matter text already in `pages.jsonl`; place them before the first body/chapter entry, in reading order. Presence is strictly opt-in: if the PDF has no such page, skip it silently — do not invent pages or guess from the body.
+
+Cover, Title page, Copyright page, and Contents are structural labels, not page headings: the label need not appear on the page (see `references/artifacts.md`). They still go through `check-outline`; verify them by page existence (cover = page 1; title page = the page repeating the title/author; copyright = the page carrying publisher/ISBN data; contents = `toc_pages`), not by title-text matching.
+
 ### 5. Fine outline
 
 Run this step only when section 4 requires body headings.
@@ -142,4 +156,4 @@ Do not ingest `pages.jsonl` or chapter slices. You may read `meta.json`, `printe
 
 ## Report to the user
 
-Give: output PDF path, depth used (printed TOC or body headings), whether a full chapter extract ran, RapidOCR `--language` if OCR ran, bookmark count, verify pass rate, remaining failures. Offer to rerun a named chapter or cap depth ("level 2 only").
+Give: output PDF path, depth used (printed TOC or body headings), whether a full chapter extract ran, RapidOCR `--language` if OCR ran, bookmark count, which front-matter bookmarks (cover / title page / copyright page / preface / contents) were included, verify pass rate, remaining failures. Offer to rerun a named chapter or cap depth ("level 2 only").
